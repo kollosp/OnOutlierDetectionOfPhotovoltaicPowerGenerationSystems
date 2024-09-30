@@ -1,0 +1,2 @@
+# OnOutlierDetectionOfPhotovoltaicPowerGenerationSystems
+On Outlier Detection Of Photovoltaic Power Generation Systems
