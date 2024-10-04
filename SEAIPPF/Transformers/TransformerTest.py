@@ -12,7 +12,9 @@ class TransformerTest(BaseEstimator,TransformerMixin):
                  regressor_degrees=11,
                  hit_points_neighbourhood=3,
                  conv2Dy_shape_factor = 0.1,
-                 conv2Dx_shape_factor = 0.5):
+                 conv2Dx_shape_factor = 0.05,
+                 sklearn_regressor = LinearRegression()):
+        self.sklearn_regressor = sklearn_regressor
         self.regressor_degrees = regressor_degrees
         self.hit_points_neighbourhood = hit_points_neighbourhood
         self.conv2Dx_shape_factor = conv2Dx_shape_factor
@@ -32,19 +34,23 @@ class TransformerTest(BaseEstimator,TransformerMixin):
 
     def transform(self, X, y=None):
         shape = X.shape[0]
-        pipe = MyPipline([
-                ('conv2Dy', image.Convolution(kernel=np.ones((1, int(self.conv2Dy_shape_factor * shape) + 1)))),
+        self.pipe_ = MyPipline([
+                # ('conv2Dy', image.Convolution(kernel=np.ones((1, int(self.conv2Dy_shape_factor * shape) + 1)))),
                 ('conv2DX', image.Convolution(kernel=np.ones((int(self.conv2Dx_shape_factor * shape) + 1, 1)))),
                 ('hit_points', image.HitPoints(max_iter=1, neighbourhood=self.hit_points_neighbourhood)),
                 ('regressor', RegressorTransformer(regressor=make_pipeline(
                     PolynomialFeatures(int(self.regressor_degrees)),
-                    LinearRegression()
+                    self.sklearn_regressor
                 ))),
             ])
 
-        mask = pipe.fit_transform(X, params={})
+        mask = self.pipe_.fit_transform(X, params={})
 
         return mask
+
+    def plot(self, ax=None, fig=None):
+        return self.pipe_.plot(ax=ax, fig=fig)
+
 
     def __str__(self):
         return f"TransformerTest({self.get_params()})"

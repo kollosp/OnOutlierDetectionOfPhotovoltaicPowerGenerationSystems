@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from typing import Protocol
 
 from matplotlib.colors import ListedColormap
+import matplotlib.dates as mdates
 
 
 class PlotterObject:
@@ -99,6 +100,10 @@ class Plotter:
 
     def show(self) -> self:
         self._fig, self._ax = plt.subplots(1)
+
+        myFmt = mdates.DateFormatter('%H:%M %d-%m-%y')
+        self._ax.xaxis.set_major_formatter(myFmt)
+
         self._ax = [self._ax]
         self._plots = []
         x = self.get_window(self._x_axis)

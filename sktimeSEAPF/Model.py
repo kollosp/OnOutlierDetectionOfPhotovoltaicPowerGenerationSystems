@@ -55,6 +55,9 @@ class Model(BaseForecaster):
     @property
     def overlay(self):
         return self.overlay_
+    @property
+    def debug_data(self):
+        return self.debug_data_ if self.debug_data_ is not None else []
 
     def _fit(self, y, X=None, fh=None):
         """
@@ -100,6 +103,7 @@ class Model(BaseForecaster):
         # create assignment series, which will be used in heatmap processing
         days_assignment = Optimized.date_day_bins(timestamps)
         elevation_assignment, self.elevation_bins_ = Optimized.digitize(elevation, self.x_bins)
+        # print("elevation_assignment", elevation_assignment)
         overlay = Optimized.overlay(data, elevation_assignment, days_assignment)
         return Overlay(overlay, self.y_bins, self.bandwidth)
 
@@ -165,11 +169,17 @@ class Model(BaseForecaster):
         elevation = Solar.elevation(Optimized.from_timestamps(timestamps), self.latitude_degrees,
                                     self.longitude_degrees) * 180 / np.pi
 
-        pred = pd.Series(index=pd.DatetimeIndex(ts), data=self._predict_step(elevation), dtype=float)
+        data, bins = self._predict_step(elevation)
+
+        debug_datas = pd.DataFrame(data={"Bins": bins, "Elevation": elevation}, index=pd.DatetimeIndex(ts), dtype=float)
+        debug_datas.name = "Debug Data"
+        debug_datas.index.name = "Debug"
+        self.debug_data_ = debug_datas
+
+        pred = pd.Series(index=pd.DatetimeIndex(ts), data=data, dtype=float)
+
         pred.name = "Prediction"
         pred.index.name = "Datetime"
-        # print("ts", pred.index)
-
         return pred
 
     def _predict_step(self, elevation):

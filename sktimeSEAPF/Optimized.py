@@ -48,7 +48,18 @@ class Optimized:
         diff = np.append(np.diff(elevation), [0])
 
         # assign afternoon elevation bins
-        pred[diff < 0] = (len(model_bins) - 1) * 2 - pred[diff < 0]
+        # without the following line chart is symmetric
+        # pred[diff < 0] = (len(model_bins) - 1) * 2 - pred[diff < 0] # <- that's not working but it may
+
+        arg_mx = np.argmax(model_representation) # middle point in the model (symmetric point)
+        middle_point_shift = len(model_representation) - arg_mx
+
+        pred[diff < 0] = len(model_representation) - pred[diff < 0]
+        # pred = pred - middle_point_shift
+        #
+        # pred[pred > len(model_representation)]  = len(model_representation) -1
+        # pred[pred < 0]  = 0
+
         pred[elevation <= 0] = 0
 
         # assign model's data to elevation bins
@@ -56,7 +67,7 @@ class Optimized:
 
         if interpolation:
             # if interpolation enabled then compute upper range
-            pred_next[diff < 0] = (len(model_bins) - 1) * 2 - pred_next[diff < 0]
+            # pred_next[diff < 0] = len(model_representation) - pred_next[diff < 0]
             pred_next = pred + 1  # store for future use
             pred_next[pred_next >= len(model_representation)] = len(model_representation)-1
 
@@ -71,8 +82,11 @@ class Optimized:
             lower_bounds = model_bins[pred_bins-1]
             ranges = upper_bounds - lower_bounds # for elevation > 0 ranges contains correct values
             e = (elevation - lower_bounds) / ranges # for elevation > 0 e contains values from range <0,1)
+
+            # Two followings lines fixes reversed interpolation
             e2 = (upper_bounds - elevation) / ranges
             e[diff < 0] = e2[diff < 0]
+
             ret = (ret + e * (ret_next - ret)) # linear interpolation
 
         if ret_bins:
@@ -107,7 +121,10 @@ class Optimized:
 
     @staticmethod
     def digitize(data: np.ndarray, bins_no: int) -> np.ndarray:
+
         bins = np.linspace(min(data), max(data), int(bins_no / 2) + 1)
+
+        print("digitize bins: ", bins, "l: ", len(bins), bins_no)
         # default assigment starts from 1
         d = np.digitize(data, bins)
         diff = np.append(np.diff(data), [0])
