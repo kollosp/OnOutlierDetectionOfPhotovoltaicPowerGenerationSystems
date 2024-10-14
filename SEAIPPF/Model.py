@@ -2,7 +2,7 @@
 # if not os.getcwd() in sys.path:
 #     sys.path.append(os.getcwd())
 
-from sktimeSEAPF.Model import Model as SEAPF
+from sktimeSEAPF.Modelv2 import Model as SEAPF
 from utils import Solar
 import numpy as np
 
@@ -53,10 +53,11 @@ class Model(SEAPF):
         :return: self
         """
 
+        self._fit_compute_statistics(y, X, fh)
         self.overlay_ = self._fit_generate_overlay(y, X, fh)
 
-        self.overlay_ = self.overlay_.apply_zeros_filter(modifier=self.zeros_filter_modifier) \
-            .apply_density_based_filter(modifier=self.density_filter_modifier)
+        # self.overlay_ = self.overlay_.apply_zeros_filter(modifier=self.zeros_filter_modifier) \
+        #     .apply_density_based_filter(modifier=self.density_filter_modifier)
 
         kde = self.overlay_.kde
         if self.transformer is not None:

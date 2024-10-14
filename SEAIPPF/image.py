@@ -7,6 +7,8 @@ from scipy.special import expit
 from matplotlib import pyplot as plt
 import numpy as np
 import seaborn as sns
+from scipy.interpolate import RBFInterpolator
+import copy
 
 def onceKernel(shape, value = 1):
     return np.array([[value] * shape[1]] * shape[0])
@@ -137,9 +139,10 @@ class Analyse(BaseEstimator,TransformerMixin):
         return fig, ax
 
 class HitPoints(BaseEstimator,TransformerMixin):
-    def __init__(self, max_iter=3, neighbourhood=5):
+    def __init__(self, max_iter=3, neighbourhood=5, preserve_original_values=False):
         self.max_iter = max_iter
         self.neighbourhood = neighbourhood
+        self.preserve_original_values = preserve_original_values
 
     def fit(self, X, y=None):
 
@@ -148,19 +151,155 @@ class HitPoints(BaseEstimator,TransformerMixin):
     def transform(self, X, y=None):
         if len(X.shape) < 2:
             raise ValueError("HitPoints.transform: X should have at least 2 dimensions ")
+        XX = copy.deepcopy(X)
 
         Z = np.zeros(X.shape)
-
+        #print("Hitpoints.transform,", self.neighbourhood)
         for _ in range(self.max_iter):
-            imx = np.argmax(X, axis=0)
+            imx = np.argmax(XX, axis=0)
+            #print("Hitpoints.transform,", self.neighbourhood, len(imx))
             # print(list(imx))
             for j,index in enumerate(imx):
-                Z[index, j] = 1
-                X[index, int(j-self.neighbourhood):int(j+self.neighbourhood)] = 0 # clear max
+                if XX[index, j] > 0:
+                    Z[index, j] = 1
+                    mi = int(index-self.neighbourhood)
+                    mx= int(index+self.neighbourhood)
+                    mi = 0 if mi < 0 else mi
+                    mx = XX.shape[0]-1 if mx > XX.shape[0] else mx
+
+                    XX[mi:mx, j] = 0 # clear neighbourhood
+
+        if self.preserve_original_values:
+            return X*Z
+        else:
+            return Z
 
 
+class RBFInter(BaseEstimator,TransformerMixin):
+    def __init__(self, epsilon=10):
+        self.epsilon = epsilon
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        coordinates = np.argwhere(X == 1)
+        xgrid = np.mgrid[0:X.shape[0]:1, 0:X.shape[1]:1]
+        xflat = xgrid.reshape(2, -1).T
+        print(xflat)
+        rbf = RBFInterpolator(coordinates, np.ones(len(coordinates)), epsilon=self.epsilon, kernel="linear")(xflat)
+        rbf = rbf.reshape(X.shape)
+        return rbf
+
+class TakeLast(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        pass
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        Z = np.zeros(X.shape)
+        for col in range(X.shape[1]):
+            y = np.flatnonzero(X[:, col])
+            if len(y >= 1):
+                Z[y[-1], col] = 1
         return Z
 
+class TakeFirst(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        pass
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X, y=None):
+        Z = np.zeros(X.shape)
+        for col in range(X.shape[1]):
+            y = np.flatnonzero(X[:, col])
+            if len(y >= 1):
+                Z[y[0], col] = 1
+        return Z
+
+
+class KernelProcess(BaseEstimator, TransformerMixin):
+    def __init__(self, kernel="gaussian", epsilon=1/16, max_roots=100):
+        """
+        :param kernel: function to estimate density
+        :param epsilon:
+        :param max_roots: number of points used to estimate density
+        """
+        self.epsilon = epsilon
+        self.kernel = kernel
+        self.max_roots = max_roots
+
+    def fit(self, X, y=None):
+        return self
+
+    def relu(self, r):
+        y = 1 - self.epsilon * r
+        if y >= 0:
+            return y
+        else:
+            return 0
+
+    def multiquadric(self, r):
+        return - np.sqrt(1 + self.epsilon * r**2)
+
+    def gaussian(self, r):
+        return np.exp(-(self.epsilon * r)**2)
+
+    def transform(self, X, y=None):
+        coordinates = np.argwhere(X > 0)
+        xgrid = np.mgrid[0:X.shape[0]:1, 0:X.shape[1]:1]
+        xflat = xgrid.reshape(2, -1).T
+
+        if self.kernel == "linear":
+            f = self.relu
+        elif self.kernel == "multiquadric":
+            f = self.multiquadric
+        elif self.kernel == "gaussian":
+            f = self.gaussian
+        else:
+            f = self.relu
+
+
+        #sqrt((x1-x1)^2 + ... + (xn-xn)^2) - euclidean distance
+        Z = np.array([np.sum([X[tuple(c)] * f(np.sqrt(np.sum((c - x)**2))) for c in coordinates]) for x in xflat])
+        Z = Z.reshape(X.shape)
+        return Z
+
+class Threshold(BaseEstimator,TransformerMixin):
+    def __init__(self, factor=1):
+        self.factor = factor
+
+    def fit(self, X, y=None):
+
+        return self
+
+    def transform(self, X, y=None):
+        if len(X.shape) < 2:
+            raise ValueError("Threshold.transform: X should have at least 2 dimensions ")
+
+        means = np.mean(X, axis=0)
+
+        for i,mean in enumerate(means):
+            X[:, i][X[:, i] < mean * self.factor] = 0
+
+        return X
+
+class Erosion(BaseEstimator,TransformerMixin):
+    def __init__(self, kernel_size=3):
+        self.kernel_size = kernel_size
+
+    def fit(self, X, y=None):
+
+        return self
+
+    def transform(self, X, y=None):
+        if len(X.shape) < 2:
+            raise ValueError("Threshold.transform: X should have at least 2 dimensions ")
+        return grey_erosion(X, size=self.kernel_size)
 
 def opening(mat, size=(3,3)):
     mat = grey_erosion(mat, size=size)

@@ -2,7 +2,7 @@ from sklearn.neighbors import KernelDensity
 import numpy as np
 
 from utils.Plotter import Plotter
-
+from matplotlib import pyplot as plt
 
 class ApplyKde:
     def __init__(self, kernel, bandwidth, bins):
@@ -11,15 +11,17 @@ class ApplyKde:
         self._bins = bins
 
     def __call__(self, a):
-
         b = a[~np.isnan(a)].reshape(-1, 1)
         if len(b) == 0:
-            return np.array([0])
+            return np.array([0] * len(self._bins))
 
         kde = KernelDensity(kernel=self._kernel, bandwidth=self._bandwidth)
         kde = kde.fit(b.reshape(-1, 1))
         log_dens = kde.score_samples(self._bins)
-        return np.exp(log_dens)
+
+        ret = np.exp(log_dens)
+
+        return ret
 
 class Overlay:
     def __init__(self, overlay, _y_bins, _bandwidth):
@@ -28,19 +30,31 @@ class Overlay:
         self._bandwidth = _bandwidth
 
         if np.all(np.isnan(self._overlay)):
-            raise ValueError("Only nans")
+            raise ValueError("Overlay: Only nans")
 
-        self._heatmap = np.apply_along_axis(lambda a: np.histogram(a[~np.isnan(a)], bins=int(self._y_bins))[0], 0,
-                                            self._overlay)
-        self._heatmap = np.apply_along_axis(lambda a: (100 * a / np.nansum(a)).astype(int), 0, self._heatmap)
+        self._heatmap = np.zeros((self._y_bins, self._overlay.shape[1]))
+        for j in range(self._heatmap.shape[1]):
+            a = self._overlay[:, j]
+            self._heatmap[:, j] = np.histogram(a[~np.isnan(a)], bins=int(self._y_bins))[0]
+            su = np.nansum(self._heatmap[:, j])
+            if su != 0:
+                self._heatmap[:, j] = self._heatmap[:, j] / su
 
-        self._max_value_in_overlay = np.nanmax(overlay) #overlay[~np.isnan(overlay)].max()
+
+        # plt.imshow(self._heatmap)
+        # plt.show()
+
+        self._max_value_in_overlay = np.nanmax(self._overlay) #overlay[~np.isnan(overlay)].max()
         r = (0, self._max_value_in_overlay)
         bins_no = int(self._y_bins)
         self._bins = np.array([r[0] + (r[1] - r[0]) * i / (bins_no - 1) for i in range(bins_no)]).reshape(-1, 1)  # bins len
 
+
+
         apply_kde = ApplyKde(kernel="gaussian", bandwidth=self._bandwidth, bins=self._bins)
-        self._kde = np.apply_along_axis(apply_kde, 0, self._overlay)
+        self._kde = np.zeros(self._heatmap.shape)
+        for j in range(self._kde.shape[1]):
+            self._kde[:, j] = apply_kde(self._overlay[:, j])
 
     @property
     def bins(self):
@@ -67,7 +81,7 @@ class Overlay:
             y = i // cols
             x = i % rows
             axis = ax[y,x]
-
+            # print(self.zeros_filter_threshold(i, modifier=mod1))
             threshold1 = int(self.kde.shape[0] * self.zeros_filter_threshold(i, modifier=mod1) / self._max_value_in_overlay)
             axis.axvline(x=threshold1, color="r")
             threshold2 = self.density_based_filter_threshold(i, modifier=mod2)
@@ -76,7 +90,13 @@ class Overlay:
     def zeros_filter_threshold(self,i, modifier:float, skip_if_threshold_lower_than:float = 0.1):
         d = self._kde[:, i]
         mx = self._max_value_in_overlay
-        threshold = sum(d * [self._max_value_in_overlay * i / len(d) for i,_ in enumerate(d)]) / d.sum()
+        # print("zeros_filter_threshold", self._max_value_in_overlay, )
+
+        su = d.sum()
+        if su != 0:
+            threshold = sum(d * [self._max_value_in_overlay * i / len(d) for i,_ in enumerate(d)]) / d.sum()
+        else:
+            return 0 # if no data are available in d -> return 0 immediately
         mi = d.min()
 
         # if default threshold is very low then skip this process

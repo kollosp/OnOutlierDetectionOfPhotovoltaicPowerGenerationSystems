@@ -46,7 +46,7 @@ class Evaluate():
         return param_names, defaults, bounds, integrality
 
     def get_params(self):
-        return  model.get_params()
+        return  self.model.get_params()
 
     def generate_set_params(self, params=[], param_names=None):
         # set model parameters

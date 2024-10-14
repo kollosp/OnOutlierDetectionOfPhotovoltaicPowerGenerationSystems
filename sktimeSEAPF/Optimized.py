@@ -39,28 +39,33 @@ class Optimized:
         return ret
 
     @staticmethod
+    def model_assign_prediction_bins(model_representation: np.ndarray, model_bins: np.ndarray, elevation: np.ndarray):
+
+        pred = np.digitize(elevation, model_bins)
+        diff = np.append(np.diff(elevation), [0])
+        pred[diff < 0] = len(model_representation) - pred[diff < 0]
+        pred[elevation <= 0] = 0
+        return pred
+
+    @staticmethod
     def model_assign(model_representation: np.ndarray, model_bins: np.ndarray, elevation: np.ndarray,
                      ret_bins: bool = True, interpolation=False) -> np.ndarray:
         # assign elevation bins
         pred_bins = np.digitize(elevation, model_bins)
-        pred = pred_bins.copy()
-        pred_next = pred_bins.copy()
+        pred = Optimized.model_assign_prediction_bins(model_representation, model_bins, elevation)
         diff = np.append(np.diff(elevation), [0])
 
         # assign afternoon elevation bins
         # without the following line chart is symmetric
         # pred[diff < 0] = (len(model_bins) - 1) * 2 - pred[diff < 0] # <- that's not working but it may
 
-        arg_mx = np.argmax(model_representation) # middle point in the model (symmetric point)
-        middle_point_shift = len(model_representation) - arg_mx
-
-        pred[diff < 0] = len(model_representation) - pred[diff < 0]
+        # pred[diff < 0] = len(model_representation) - pred[diff < 0]
         # pred = pred - middle_point_shift
         #
         # pred[pred > len(model_representation)]  = len(model_representation) -1
         # pred[pred < 0]  = 0
 
-        pred[elevation <= 0] = 0
+        # pred[elevation <= 0] = 0
 
         # assign model's data to elevation bins
         ret = np.array([model_representation[p] for p in pred])
@@ -95,20 +100,18 @@ class Optimized:
             return ret
 
     @staticmethod
-    def overlay(data: np.ndarray, x_assignment: np.ndarray, y_assignment: np.ndarray) -> np.ndarray:
-        x_no = np.unique(x_assignment)
-        y_no = np.unique(y_assignment)
-        heatmap = np.empty((len(y_no), len(x_no)))
-        counts = np.empty((len(y_no), len(x_no)))
+    def overlay(data: np.ndarray, x_assignment: np.ndarray, y_assignment: np.ndarray, x_bins:int, y_bins:int) -> np.ndarray:
+        # heatmap = np.empty((len(np.unique(days_assignment)), elevation_bins))
+        heatmap = np.empty((y_bins, x_bins))
+        counts = np.empty(heatmap.shape)
         heatmap[:] = np.nan
         counts[:] = 0
 
-        for i, _ in enumerate(data):
-            x, y = x_assignment[i], y_assignment[i]
+        for x, y, v in zip(x_assignment,y_assignment, data):
             if np.isnan(heatmap[y, x]):
-                heatmap[y, x] = data[i]
+                heatmap[y, x] = v
             else:
-                heatmap[y, x] += data[i]
+                heatmap[y, x] += v
             counts[y, x] += 1
 
         # mean aggregating
@@ -120,11 +123,16 @@ class Optimized:
         return heatmap
 
     @staticmethod
-    def digitize(data: np.ndarray, bins_no: int) -> np.ndarray:
+    def digitize(data: np.ndarray, bins_no: int, mx:float=None, mi:float=None) -> np.ndarray:
 
-        bins = np.linspace(min(data), max(data), int(bins_no / 2) + 1)
+        if mx is None:
+            mx = max(data)
+        if mi is None:
+            mi = min(data)
 
-        print("digitize bins: ", bins, "l: ", len(bins), bins_no)
+        bins = np.linspace(mi, mx, int(bins_no / 2) + 1)
+
+        # print("digitize bins: ", bins, "l: ", len(bins), bins_no)
         # default assigment starts from 1
         d = np.digitize(data, bins)
         diff = np.append(np.diff(data), [0])
@@ -148,7 +156,7 @@ class Optimized:
         for i, ts in enumerate(timestamps):
             a.append(int((ts - first) / seconds_per_days))
 
-        return a
+        return np.array(a)
 
     @staticmethod
     def from_timestamps(ts: List[float]) -> List[dt]:

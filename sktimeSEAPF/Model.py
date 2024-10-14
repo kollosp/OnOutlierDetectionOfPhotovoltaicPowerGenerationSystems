@@ -26,7 +26,7 @@ class Model(BaseForecaster):
                  y_bins: int = 10,
                  bandwidth: float = 0.4,
                  window_size: int = None,
-                 enable_debug_params: bool = False,
+                 enable_debug_params: bool = True,
                  zeros_filter_modifier:float=0,
                  density_filter_modifier:float=0,
                  interpolation=False,
@@ -59,6 +59,10 @@ class Model(BaseForecaster):
     def debug_data(self):
         return self.debug_data_ if self.debug_data_ is not None else []
 
+    @property
+    def max_seen(self):
+        return self.max_seen_
+
     def _fit(self, y, X=None, fh=None):
         """
         Fit function that is similar to sklearn scheme X contains features while y contains corresponding correct values
@@ -68,7 +72,7 @@ class Model(BaseForecaster):
         :param density_filter_modifier:
         :return: self
         """
-
+        self._fit_compute_statistics(y, X, fh)
         self.overlay_ = self._fit_generate_overlay(y, X, fh)
 
         self.overlay_ = self.overlay_.apply_zeros_filter(modifier=self.zeros_filter_modifier)\
@@ -78,33 +82,45 @@ class Model(BaseForecaster):
         # print(self.model _representation_)
         return self
 
+    def _fit_compute_statistics(self, y, X=None, fh=None):
+        self.max_seen_ = max(y)
+
     def _fit_generate_overlay(self, y, X=None, fh=None):
 
         # model is prepared to work with only one param in X
         # pandas._libs.tslibs.timedeltas.Timedelta
         self.x_time_delta_ = (y.index[-1] - y.index[0]) / len(y)
-        ts = y.index
-        timestamps = (ts.astype(int) // 10e8).astype(int)
-        data = y.values  # pd.Series
+        self.y_max_ = max(y.values)
 
-        self.y_max_ = max(data)
         # ts = ts + self.step_count_ * self.x_time_delta_ # if more data is in Y then those data corresponds
         # with future. So if the model uses only one (last) element
         # in y[:, ] then ts has to be adjusted
+        data = y.values
         if self.window_size is not None and self.window_size >= 1:
-            data = Optimized.window_moving_avg(data, window_size=self.window_size, roll=True)
+            data = Optimized.window_moving_avg(y.values, window_size=self.window_size, roll=True)
 
-        # calculate elevation angles for the given timestamps
+        timestamps = y.index.astype(int) / 10 ** 9
+        ts = Optimized.from_timestamps(timestamps)
         elevation = Solar.elevation(ts, self.latitude_degrees,
                                     self.longitude_degrees) * 180 / np.pi
 
-        # remove negative timestamps
-        elevation[elevation <= 0] = 0
+        # elevation[elevation <= 0] = 0
         # create assignment series, which will be used in heatmap processing
         days_assignment = Optimized.date_day_bins(timestamps)
-        elevation_assignment, self.elevation_bins_ = Optimized.digitize(elevation, self.x_bins)
-        # print("elevation_assignment", elevation_assignment)
-        overlay = Optimized.overlay(data, elevation_assignment, days_assignment)
+        elevation_assignment, self.elevation_bins_ = \
+            Optimized.digitize(elevation, self.x_bins, mi=0,
+                               mx=Solar.sun_maximum_positive_elevation(self.latitude_degrees))
+
+        indicies = elevation > 0
+        overlay = Optimized.overlay(data[indicies],
+                                    elevation_assignment[indicies],
+                                    days_assignment[indicies],
+                                    x_bins=self.x_bins,
+                                    y_bins=len(np.unique(days_assignment[indicies])))
+
+        # plt.imshow(overlay)
+        # plt.show()
+
         return Overlay(overlay, self.y_bins, self.bandwidth)
 
     @staticmethod
@@ -128,8 +144,6 @@ class Model(BaseForecaster):
 
         self.model_representation_ = np.concatenate([self.overlay_.bins[i] for _,i in enumerate(model_representation)])
 
-
-
     def plot(self, plots=["overlay", "model"]):
         plots = [p.lower() for p in plots]
         fig, ax = plt.subplots(3)
@@ -149,7 +163,6 @@ class Model(BaseForecaster):
             ax[0].plot(x, mx, color="orange")
             ax[0].plot(x, mi, color="orange")
 
-
             ax[1].imshow(self.overlay_.heatmap, cmap='Reds', origin='lower')
             ax[2].imshow(self.overlay_.kde, cmap='Blues', origin='lower')
 
@@ -165,7 +178,7 @@ class Model(BaseForecaster):
         # if sequence expected then return 2D array that contains prediction for each step.
 
         #iterative approach - make trajectory forecasting
-        timestamps = (ts.astype(int) // 10e8).astype(int)
+        timestamps = (ts.astype(int) // 10**9).astype(int)
         elevation = Solar.elevation(Optimized.from_timestamps(timestamps), self.latitude_degrees,
                                     self.longitude_degrees) * 180 / np.pi
 
@@ -186,7 +199,7 @@ class Model(BaseForecaster):
         return Optimized.model_assign(self.model_representation_,
                                       self.elevation_bins_,
                                       elevation,
-                                      self.enable_debug_params,
+                                      ret_bins=True,
                                       interpolation=self.interpolation)
 
     # def score(self, X, y):
