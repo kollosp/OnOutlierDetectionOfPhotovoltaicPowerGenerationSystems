@@ -16,21 +16,22 @@ from sktimeSEAPF.Optimized import Optimized
 
 if __name__ == "__main__":
     data, ts = utils.load_pv(convert_index_to_time=True)
-    start=288*150
+    start=288*0
     # data, ts = data[start:], ts[start:]
     data[data > 15] = 0
+    bins = 90
     model = SEAIPPFModel(
         latitude_degrees=utils.LATITUDE_DEGREES,
         longitude_degrees=utils.LONGITUDE_DEGREES,
-        x_bins=180,
-        y_bins=180,
-
+        x_bins=bins,
+        y_bins=bins,
+        y_adjustment=True,
         interpolation=True,
         enable_debug_params= True,
         transformer=TransformerSimpleFiltering(
-            regressor_degrees=11,
+            regressor_degrees=9,
             hit_points_max_iter=2,
-            hit_points_neighbourhood=14,
+            hit_points_neighbourhood=int(0.15*bins),
             sklearn_regressor= LinearRegression())
             # sklearn_regressor = MLPRegressor(hidden_layer_sizes=(15,15), activation="relu",  max_iter=10000, tol=1e-5, verbose=True))
             # sklearn_regressor = MLPRegressor(hidden_layer_sizes=(20,20,15,15), activation="relu",  max_iter=4000, verbose=True))
@@ -39,8 +40,8 @@ if __name__ == "__main__":
     )
 
     shift = 0
-    train_test_split = 288*365 + shift
-    test_len = 288*400+shift
+    train_test_split = 288*360 + shift
+    test_len = 288*360+shift
 
     y_train, y_test = data["Production"][shift:train_test_split], data["Production"][train_test_split:train_test_split+test_len]
 
@@ -52,7 +53,7 @@ if __name__ == "__main__":
     model.plot()
     model.transformer.plot()
 
-    y_test_avg = Optimized.window_moving_avg(y_test.values, window_size=7, roll=True)
+    y_test_avg = Optimized.window_moving_avg(y_test.values, window_size=36, roll=True)
 
     # print_data = pd.DataFrame({'s1': data["Production"], 's2': pred})
     # print_data.plot()

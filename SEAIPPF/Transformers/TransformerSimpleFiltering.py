@@ -56,10 +56,10 @@ class TransformerSimpleFiltering(BaseEstimator,TransformerMixin):
                 ('Max 2', image.HitPoints(max_iter=1, neighbourhood=self.hit_points_neighbourhood,
                                                  preserve_original_values=False)),
 
-                ('Regressor', RegressorTransformer(regressor=make_pipeline(
-                    PolynomialFeatures(int(self.regressor_degrees)),
-                    self.sklearn_regressor
-                ))),
+                # ('Regressor', RegressorTransformer(regressor=make_pipeline(
+                #     PolynomialFeatures(int(self.regressor_degrees)),
+                #     self.sklearn_regressor
+                # ))),
             ])
 
         mask = self.pipe_.fit_transform(X, params={})

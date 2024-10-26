@@ -57,7 +57,6 @@ if __name__ == "__main__":
             # sklearn_regressor = MLPRegressor(hidden_layer_sizes=(20,20,15,15), activation="relu",  max_iter=4000, verbose=True))
             # sklearn_regressor = MLPRegressor(hidden_layer_sizes=(25,20,20), activation="logistic",  max_iter=10000, verbose=True))
             # sklearn_regressor = MLPRegressor(hidden_layer_sizes=(5,5,5), activation="logistic",  max_iter=10000, verbose=True)
-
     )
     window_length = 288 * 365
     cv = SlidingWindowSplitter(window_length=window_length, step_length=288, fh=list(range(1,288+1)))

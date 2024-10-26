@@ -13,6 +13,7 @@ class Model(SEAPF):
                  x_bins: int = 10,
                  y_bins: int = 10,
                  window_size: int = None,
+                 y_adjustment: bool = False,
                  enable_debug_params: bool = False,
                  interpolation=False,
                  return_sequences = False,
@@ -34,6 +35,7 @@ class Model(SEAPF):
             x_bins = x_bins,
             y_bins = y_bins,
             window_size = window_size,
+            y_adjustment = y_adjustment,
             enable_debug_params = enable_debug_params,
             interpolation = interpolation,
             return_sequences = return_sequences,
@@ -54,7 +56,8 @@ class Model(SEAPF):
         """
 
         self._fit_compute_statistics(y, X, fh)
-        self.overlay_ = self._fit_generate_overlay(y, X, fh)
+        self.overlay_, self.y_adjustment_obs = self._fit_generate_overlay(y, X, fh)
+        self._fit_y_adjustment(y, X, fh, self.y_adjustment_obs)
 
         # self.overlay_ = self.overlay_.apply_zeros_filter(modifier=self.zeros_filter_modifier) \
         #     .apply_density_based_filter(modifier=self.density_filter_modifier)
@@ -64,6 +67,7 @@ class Model(SEAPF):
             kde = self.transformer.fit(kde).transform(kde)
         else:
             print("SEAIPPF model: self.transformer should not be None. Pass one of available transformers to constructor")
+
 
         self.model_representation_ = np.apply_along_axis(lambda a: self.overlay_.bins[np.argmax(a)], 0, kde).flatten()
         # print(self.model_representation_)

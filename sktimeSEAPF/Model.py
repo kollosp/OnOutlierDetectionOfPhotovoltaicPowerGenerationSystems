@@ -3,6 +3,7 @@ from __future__ import annotations  # type or "|" operator is available since py
 import numpy as np
 import pandas as pd
 from sktime.forecasting.base import BaseForecaster
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 from utils import Solar
 from utils.Plotter import Plotter
@@ -73,7 +74,9 @@ class Model(BaseForecaster):
         :return: self
         """
         self._fit_compute_statistics(y, X, fh)
-        self.overlay_ = self._fit_generate_overlay(y, X, fh)
+        self.overlay_, self.y_adjustment_obs = self._fit_generate_overlay(y, X, fh)
+        self._fit_y_adjustment(y, X, fh, self.y_adjustment_obs)
+
 
         self.overlay_ = self.overlay_.apply_zeros_filter(modifier=self.zeros_filter_modifier)\
             .apply_density_based_filter(modifier=self.density_filter_modifier)
@@ -82,8 +85,15 @@ class Model(BaseForecaster):
         # print(self.model _representation_)
         return self
 
+    def _fit_y_adjustment(self, y, X=None, fh=None, y_adjustment_obs=np.zeros((1,1))):
+        reg = LinearRegression().fit(X=y_adjustment_obs[:,1:], y=y_adjustment_obs[:,0])
+        self._y_adjustment_coef_ = reg.coef_[0]
+        self._y_adjustment_intercept_ = reg.intercept_
+        # print("_fit_y_adjustment", reg.coef_,  reg.intercept_)
+
     def _fit_compute_statistics(self, y, X=None, fh=None):
         self.max_seen_ = max(y)
+
 
     def _fit_generate_overlay(self, y, X=None, fh=None):
 
@@ -111,6 +121,12 @@ class Model(BaseForecaster):
             Optimized.digitize(elevation, self.x_bins, mi=0,
                                mx=Solar.sun_maximum_positive_elevation(self.latitude_degrees))
 
+        y_adjustment_obs = pd.DataFrame({
+            "y": y,
+            "elevation": elevation,
+            "days_assignment": days_assignment
+        }).groupby("days_assignment").agg({"y": "max", "elevation":"max"}).to_numpy()
+
         indicies = elevation > 0
         overlay = Optimized.overlay(data[indicies],
                                     elevation_assignment[indicies],
@@ -121,7 +137,7 @@ class Model(BaseForecaster):
         # plt.imshow(overlay)
         # plt.show()
 
-        return Overlay(overlay, self.y_bins, self.bandwidth)
+        return Overlay(overlay, self.y_bins, self.bandwidth), y_adjustment_obs
 
     @staticmethod
     def _shape_check(shape1, shape2):
@@ -144,9 +160,9 @@ class Model(BaseForecaster):
 
         self.model_representation_ = np.concatenate([self.overlay_.bins[i] for _,i in enumerate(model_representation)])
 
-    def plot(self, plots=["overlay", "model"]):
+    def plot(self, plots=["overlay", "model", "y_adjustment"]):
         plots = [p.lower() for p in plots]
-        fig, ax = plt.subplots(3)
+        fig, ax = plt.subplots(4)
         ov = self.overlay_.overlay
         Plotter.plot_overlay(ov, fig=fig, ax=ax[0])
         x = list(range(ov.shape[1]))
@@ -169,6 +185,10 @@ class Model(BaseForecaster):
         # Plotter.plot_2D_histograms(self.overlay_.heatmap, self.overlay_.kde)
         if plots is None or "overlay" in plots:
             self.overlay_.plot()
+
+        if plots is None or "y_adjustment" in plots:
+            ax[3].scatter(x=self.y_adjustment_obs[:,1], y=self.y_adjustment_obs[:,0])
+            ax[3].plot(self.y_adjustment_obs[:,1], self._y_adjustment_coef_ * self.y_adjustment_obs[:,1] + self._y_adjustment_intercept_, c="orange")
         return fig, ax
 
     def _predict(self, fh, X):

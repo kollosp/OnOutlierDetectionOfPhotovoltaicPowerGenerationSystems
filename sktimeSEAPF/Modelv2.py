@@ -24,6 +24,7 @@ class Model(basemodel):
                  y_bins: int = 10,
                  bandwidth: float = 0.4,
                  window_size: int = None,
+                 y_adjustment: bool = False,
                  enable_debug_params: bool = True,
                  zeros_filter_modifier:float=0,
                  density_filter_modifier:float=0,
@@ -44,6 +45,8 @@ class Model(basemodel):
             interpolation = interpolation,
             return_sequences = return_sequences
         )
+
+        self.y_adjustment = y_adjustment
 
     def get_model_value(self, x, xfactor_a=1, xfactor_b=0, yfactor=1):
         """
@@ -97,8 +100,14 @@ class Model(basemodel):
         day_progress_factor = day_progress / day_len
 
         mx_model_representation = max(self.model_representation_)
-        y_scale_factor = (zenith / global_max_zenith) #* (self.max_seen / mx_model_representation)
-        prediction = self.get_model_values(day_progress_factor, yfactor=y_scale_factor)
+        #y_scale_factor = (zenith / global_max_zenith) #* (self.max_seen / mx_model_representation)
+        #y_scale_factor = np.ones(len(zenith)) #* (self.max_seen / mx_model_representation)
+        prediction = self.get_model_values(day_progress_factor)
+
+        if self.y_adjustment:
+            factor = (self._y_adjustment_coef_ * zenith + self._y_adjustment_intercept_) / mx_model_representation
+            prediction = prediction * factor
+
         self.debug_data_ = pd.DataFrame(data={
             "Elevation": elevation,
             #"Bins": pred_bins,
@@ -124,21 +133,6 @@ class Model(basemodel):
 
 
         return pred
-
-        # data, bins = self._predict_step(elevation)
-        #
-        # debug_datas = pd.DataFrame(data={"Bins": bins, "Elevation": elevation}, index=pd.DatetimeIndex(ts), dtype=float)
-        # debug_datas.name = "Debug Data"
-        # debug_datas.index.name = "Debug"
-        # self.debug_data_ = debug_datas
-        #
-        # pred = pd.Series(index=pd.DatetimeIndex(ts), data=data, dtype=float)
-        #
-        # pred.name = "Prediction"
-        # pred.index.name = "Datetime"
-        # return pred
-
-
 
     def __str__(self):
         # return "Model representation: " + str(self.model_representation_) + \
